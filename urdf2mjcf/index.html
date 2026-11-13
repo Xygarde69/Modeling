@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>URDF → MJCF Studio</title>
+<style>
+:root{--bg:#14171c;--panel:#1b1f26;--panel2:#222733;--line:#303746;--fg:#dfe5ee;--mut:#8a94a6;--acc:#4da3ff;--ok:#4cc38a;--bad:#ff6b6b;--warn:#f5b84a}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,sans-serif;display:flex;flex-direction:column}
+button,input,select{font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:3px 6px;min-width:0}
+button{cursor:pointer;white-space:nowrap}button:hover{border-color:var(--acc)}button.pri{background:var(--acc);color:#001;border-color:var(--acc);font-weight:600}
+button.sm{padding:1px 6px;font-size:12px}
+input[type=text],input[type=number],select{width:100%}input[type=checkbox]{width:auto}
+input::placeholder{color:#5d6678}
+#top{display:flex;gap:8px;align-items:center;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+#top input{flex:1;min-width:120px}#top b{white-space:nowrap}
+#main{flex:1;display:grid;grid-template-columns:240px minmax(0,1fr) 420px;min-height:0}
+.col{overflow:auto;min-height:0;background:var(--panel)}
+#left{border-right:1px solid var(--line)}#right{border-left:1px solid var(--line);display:flex;flex-direction:column}
+#center{display:grid;grid-template-rows:minmax(0,1fr) 250px;grid-template-columns:minmax(0,1fr);min-height:0;min-width:0}#center>*{min-width:0}
+#view{position:relative;background:#0e1014;min-height:0;overflow:hidden}#view canvas{display:block;position:absolute;inset:0}
+#viewmsg{position:absolute;left:8px;top:8px;color:var(--mut);font-size:12px;pointer-events:none}
+#bottom{border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#bhead{display:flex;gap:6px;padding:4px 8px;align-items:center;background:var(--panel);flex-wrap:wrap}#bhead .sp{flex:1}
+#xml{flex:1;margin:0;overflow:auto;padding:8px;background:#0e1014;font:12px/1.35 ui-monospace,monospace;white-space:pre;min-height:0}
+#status{padding:4px 8px;font-size:12px;border-top:1px solid var(--line);background:var(--panel);max-height:80px;overflow:auto}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+.tree div.n{padding:2px 6px;cursor:pointer;white-space:nowrap;border-left:2px solid transparent}
+.tree div.n:hover{background:var(--panel2)}.tree div.n.sel{background:#243b57;border-left-color:var(--acc)}
+.tree .jt{color:var(--mut);font-size:11px}.tree .act{color:var(--ok);font-size:11px}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel);flex:none}
+.tabs button{flex:1;border:0;border-radius:0;background:none;padding:8px 2px}.tabs button.on{border-bottom:2px solid var(--acc);color:var(--acc)}
+#panes{flex:1;overflow:auto}
+.pane{padding:8px 10px;display:none}.pane.on{display:block}
+details{border:1px solid var(--line);border-radius:6px;margin:0 0 8px;padding:0 8px}
+details[open]{padding-bottom:6px}
+summary{cursor:pointer;color:var(--acc);font-weight:600;padding:6px 0;list-style-position:inside}
+.row{display:grid;grid-template-columns:150px 1fr;gap:6px;align-items:center;margin:3px 0}
+.row label{color:var(--mut);font-size:12px}.row label.set{color:var(--fg)}
+.row label[title]:not([title=""]){text-decoration:underline dotted #556}
+.vec{display:grid;gap:3px}
+.hint{color:var(--mut);font-size:11px;margin:2px 0 6px}
+table{width:100%;border-collapse:collapse}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:12px}
+td.r,th.r{text-align:right}
+.chk{display:flex;gap:4px 12px;flex-wrap:wrap;margin:4px 0}.chk label{display:flex;gap:4px;align-items:center}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.card{border:1px solid var(--line);border-radius:6px;margin:4px 0;background:#1e232c}
+.card .hd{display:flex;gap:6px;align-items:center;padding:4px 6px;cursor:pointer}.card .hd b{flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .bd{padding:0 8px 6px}
+.tag{font-size:11px;padding:0 5px;border-radius:3px;background:#2c3445;color:var(--mut)}
+#modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:9}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;width:560px;max-height:80vh;display:flex;flex-direction:column}
+#modal .list{overflow:auto;flex:1}#modal .list div{padding:4px 10px;cursor:pointer}#modal .list div:hover{background:var(--panel2)}
+</style></head><body>
+<div id="top">
+  <b>URDF → MJCF Studio</b>
+  <input id="path" type="text" placeholder="path to URDF folder or .urdf file" />
+  <button id="browse">Browse…</button><button id="load" class="pri">Load</button>
+  <span style="flex:.2"></span>
+  <input id="outdir" type="text" style="max-width:260px" placeholder="output folder" />
+  <input id="fname" type="text" style="max-width:150px" value="model.xml" />
+  <button id="save" class="pri">Save MJCF</button>
+</div>
+<div id="main">
+  <div id="left" class="col"><div class="tabs"><button class="on">Kinematic tree</button></div><div id="tree" class="tree"></div></div>
+  <div id="center">
+    <div id="view"><div id="viewmsg">Load a URDF…</div></div>
+    <div id="bottom">
+      <div id="bhead"><b>MJCF preview</b><span class="sp"></span>
+        <button id="regen">Re-generate &amp; validate</button><button id="copy">Copy XML</button>
+        <button id="expcfg">Export config</button><button id="impcfg">Import config</button><input id="impfile" type="file" accept=".json" hidden>
+      </div>
+      <pre id="xml"></pre>
+      <div id="status" class="mut">Not generated yet.</div>
+    </div>
+  </div>
+  <div id="right" class="col">
+    <div class="tabs" id="rtabs">
+      <button data-p="pm" class="on">Model</button><button data-p="pp">Physics</button><button data-p="pd">Defaults</button>
+      <button data-p="ps">Selected</button><button data-p="pn">Sensors</button><button data-p="px">Extras</button>
+    </div>
+    <div id="panes"><div id="pm" class="pane on"></div><div id="pp" class="pane"></div><div id="pd" class="pane"></div>
+      <div id="ps" class="pane"></div><div id="pn" class="pane"></div><div id="px" class="pane"></div></div>
+  </div>
+</div>
+<div id="modal"><div class="box"><div style="padding:8px;display:flex;gap:6px"><input id="mpath" type="text"><button id="mgo">Go</button><button id="mclose">Close</button></div><div class="list" id="mlist"></div></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+let M=null,C=null,S=null,SEL=null,genTimer=null,genSeq=0,lastXML='',LASTV=null;
+const OPEN={};          // remembered <details> open state
+const SOPEN=new Set();  // expanded sensor cards
+const Q={};             // preview joint angles
+const api=async(p,body)=>{const r=await fetch(p,body?{method:'POST',body:JSON.stringify(body)}:{});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j};
+const el=(t,a={},...k)=>{const e=document.createElement(t);for(const[x,v]of Object.entries(a)){if(x==='class')e.className=v;else if(x.startsWith('on'))e.addEventListener(x.slice(2),v);else if(v!==null&&v!==undefined&&v!==false)e.setAttribute(x,v)}for(const c of k.flat())if(c!==null&&c!==undefined&&c!==false)e.append(c.nodeType?c:document.createTextNode(c));return e};
+const num=v=>{if(v===''||v===null||v===undefined)return null;const n=parseFloat(v);return isNaN(n)?null:n};
+const blank=v=>v===null||v===undefined||v===''||v==='inherit'||(Array.isArray(v)&&v.every(x=>x===null||x===''||x===undefined));
+const fmt=v=>Array.isArray(v)?v.join(' '):(v===true?'yes':v===false?'no':String(v));
+const isScalar=j=>['revolute','continuous','prismatic'].includes(j.type);
+function changed(){clearTimeout(genTimer);genTimer=setTimeout(generate,500)}
+const D=(id,title,...kids)=>{const d=el('details',{},el('summary',{},title),kids);d.open=OPEN[id]??true;d.ontoggle=()=>OPEN[id]=d.open;return d};
+const hint=t=>el('div',{class:'hint'},t);
+
+/* ---------- generic schema-driven field ---------- */
+// f: {k,label,t,opts,hint}; obj[f.k] is the value; ph = inherited value shown as placeholder
+function field(obj,f,ph,onchg){
+  const after=()=>{lab.className=blank(obj[f.k])?'':'set';changed();onchg&&onchg()};
+  const lab=el('label',{title:f.hint||''},f.label);let inp;
+  if(f.t==='sel'){inp=el('select');const o0=ph!==undefined;
+    const inh=f.inh||'inherit';if(o0&&!f.opts.includes(''))inp.append(el('option',{value:''},`— ${inh} (${fmt(ph)})`));
+    for(const o of f.opts){const[v,t]=Array.isArray(o)?o:[o,o];inp.append(el('option',{value:v},v===''?(o0?`— inherit (${fmt(ph)})`:'— default'):t))}
+    const vals=[...inp.options].map(o=>o.value);inp.value=vals.includes(obj[f.k]??'')?(obj[f.k]??''):(vals.includes('inherit')?'inherit':vals[0]);inp.onchange=()=>{obj[f.k]=inp.value===''?null:inp.value;after()}}
+  else if(f.t==='tri'){inp=el('select');for(const[v,t]of[['',ph!==undefined&&ph!==null?`— inherit (${fmt(ph)})`:'— default'],['true','Yes'],['false','No']])inp.append(el('option',{value:v},t));
+    inp.value=obj[f.k]===true?'true':obj[f.k]===false?'false':(obj[f.k]??'');inp.onchange=()=>{obj[f.k]=inp.value===''?null:inp.value==='true';after()}}
+  else if(f.t==='bool'){inp=el('input',{type:'checkbox'});inp.checked=!!obj[f.k];inp.onchange=()=>{obj[f.k]=inp.checked;after()};inp=el('div',{},inp)}
+  else if(f.t==='text'){inp=el('input',{type:'text',placeholder:ph!=null?String(ph):''});inp.value=obj[f.k]??'';inp.oninput=()=>{obj[f.k]=inp.value||null;after()}}
+  else if(f.t.startsWith('vec')){const n=+f.t.slice(3);inp=el('div',{class:'vec',style:`grid-template-columns:repeat(${n},1fr)`});
+    const cur=Array.isArray(obj[f.k])?obj[f.k]:[];const phv=Array.isArray(ph)?ph:[];
+    for(let i=0;i<n;i++){const x=el('input',{type:'number',step:'any',placeholder:phv[i]!=null?String(phv[i]):''});x.value=cur[i]??'';
+      x.oninput=()=>{const a=Array.isArray(obj[f.k])?obj[f.k]:Array(n).fill(null);a[i]=num(x.value);obj[f.k]=blank(a)?null:a;after()};inp.append(x)}}
+  else{inp=el('input',{type:'number',step:f.t==='int'?1:'any',placeholder:ph!=null?String(ph):''});inp.value=obj[f.k]??'';inp.oninput=()=>{obj[f.k]=num(inp.value);after()}}
+  lab.className=blank(obj[f.k])?'':'set';
+  return el('div',{class:'row'},lab,inp)}
+const Fq=(obj,k,label,t='num',x={})=>field(obj,{k,label,t,...x},x.ph,x.onchg);
+const fields=(obj,list,phOf)=>list.map(f=>field(obj,f,phOf?phOf(f.k):undefined));
+const sel=(obj,k,label,opts,onchg,ph)=>field(obj,{k,label,t:'sel',opts},ph,onchg);
+
+/* ---------- Model tab ---------- */
+function renderModel(){
+  const g=C.global,P=$('#pm');P.innerHTML='';
+  P.append(
+    D('m-model','Model',Fq(g,'modelName','Model name','text'),
+      Fq(g,'meshScale','Mesh scale',undefined,{hint:'Multiplies URDF mesh scale. Use 0.001 if STLs are in millimetres',onchg:()=>buildScene()}),
+      Fq(g,'rootFree','Floating base (freejoint)','bool',{hint:'Robot can fall/walk instead of being bolted to the world'}),
+      Fq(g,'rootHeight','Base start height (m)'),
+      Fq(g,'fusestatic','Fuse static bodies','bool',{hint:'Merge bodies without joints into parent (forced on with floating base)'})),
+    D('m-scene','Scene',Fq(g,'floor','Ground plane','bool'),Fq(g,'floorSize','Floor half-size (m)'),
+      Fq(g,'floorFriction','Floor friction','vec3',{ph:[1,0.005,0.0001]}),
+      Fq(g,'prettyScene','Skybox + checker floor','bool'),
+      Fq(g,'selfCollision','Self collision','bool',{hint:'Off = links only collide with the floor'}),
+      Fq(g,'showCollision','Show collision geoms','bool',{hint:'Puts collision geoms in visible group 1 instead of hidden group 3'})),
+    D('m-comp','Compiler (<compiler>)',...fields(g.compiler,S.compiler)));
+}
+/* ---------- Physics tab ---------- */
+function renderPhysics(){
+  const g=C.global,P=$('#pp');P.innerHTML='';
+  const fl=el('div');
+  for(const[k,d]of Object.entries(S.flags))fl.append(field(g.flags,{k,label:k,t:'sel',opts:['enable','disable'],inh:'default'},d));
+  P.append(D('p-opt','Simulation options (<option>)',...fields(g.option,S.option),hint('Blank = MuJoCo default.')),
+    D('p-flag','Pipeline flags (<option><flag>)',hint('Enable/disable parts of the pipeline. "energy" enables energy sensors/readout.'),fl));
+}
+/* ---------- Defaults tab ---------- */
+const MATOPTS=()=>Object.keys(S.materials).map(k=>[k,`${k} (${S.materials[k]})`]);
+const MASSMODES=[['urdf','URDF inertial (× scale)'],['density','Uniform density from mesh'],['mass','Uniform density, fixed total mass']];
+const MESHINERT=[['convex','convex hull (robust)'],['exact','exact (needs watertight mesh)'],['legacy','legacy (overcounts concave)'],['shell','shell (density = kg/m²)']];
+const COLLMODES=[['visual','Visual meshes (convex hull)'],['urdf','URDF <collision>'],['fit-box','Fitted box'],['fit-capsule','Fitted capsule'],['fit-cylinder','Fitted cylinder'],['fit-sphere','Fitted sphere'],['fit-ellipsoid','Fitted ellipsoid'],['none','None']];
+function actFields(obj,phObj){
+  const t=obj.type&&obj.type!=='inherit'?obj.type:(phObj?phObj.type:obj.type);
+  if(!t||t==='none')return[];
+  return S.actuator.filter(f=>f.types.includes(t)).map(f=>field(obj,f,phObj?phObj[f.k]??undefined:undefined))}
+function renderDefaults(){
+  const g=C.global,P=$('#pd');P.innerHTML='';
+  const ad=g.actuatorDefaults;
+  const actBox=el('div');const drawAct=()=>{actBox.innerHTML='';actBox.append(...actFields(ad))};drawAct();
+  P.append(
+    D('d-mass','Mass & inertia',
+      sel(g,'defaultMassMode','Mass source',MASSMODES,()=>renderDefaults()),
+      ...(g.defaultMassMode==='urdf'?[Fq(g,'defaultMassScale','URDF mass × scale','num',{hint:'Scales mass and inertia of URDF inertials'})]:[]),
+      ...(g.defaultMassMode==='density'?[sel(g,'defaultMaterial','Material',MATOPTS().concat([['','Custom density']]),()=>{if(S.materials[g.defaultMaterial])g.defaultDensity=S.materials[g.defaultMaterial];renderDefaults()}),
+        Fq(g,'defaultDensity','Density kg/m³')]:[]),
+      sel(g,'defaultMeshInertia','Mesh volume method',MESHINERT),
+      hint('CAD parts are often hollow: uniform solid density can be far heavier than the URDF values. Compare in the report below.'),
+      massReport()),
+    D('d-coll','Collision & contact',sel(g,'defaultCollision','Collision geometry',COLLMODES),
+      Fq(g,'defaultFitscale','Fitted primitive scale'),...fields(g.geomDefaults,S.geom)),
+    D('d-joint','Joint dynamics (all joints)',...fields(g.jointDefaults,S.joint),hint('Written as <default><joint>. URDF <dynamics> values and per-joint overrides take precedence.')),
+    D('d-act','Actuators (all joints)',
+      field(ad,{k:'type',label:'Type',t:'sel',opts:S.actTypes.map(t=>[t,`${t} — ${S.actDesc[t]}`])},undefined,()=>drawAct()),actBox,
+      el('div',{class:'btns'},
+        el('button',{onclick:()=>{for(const j in C.joints)C.joints[j].actuator={type:'inherit'};renderSel();changed()}},'Reset joints to inherit'),
+        el('button',{onclick:()=>{let n=0;for(const[k,j]of Object.entries(M.joints))if(j.effort>0&&isScalar(j)){C.joints[k].actuator.torqueLimit=j.effort;n++}renderSel();changed();alert(n?`Set ${n} torque limits`:'URDF has no effort limits')}},'Torque limits ← URDF effort'))));
+}
+function massReport(){
+  const t=el('table',{},el('tr',{},el('th',{},'Link'),el('th',{class:'r'},'URDF kg'),el('th',{class:'r'},'MJCF kg'),el('th',{class:'r'},'ratio')));
+  let su=0,sm=0;
+  for(const[n,l]of Object.entries(M.links)){const u=l.inertial?l.inertial.mass:0;const mm=LASTV?.masses?.[n];if(!u&&!mm)continue;su+=u;sm+=mm||0;
+    const r=u&&mm!=null?mm/u:null;
+    t.append(el('tr',{onclick:()=>select(n),style:'cursor:pointer'},el('td',{},n),el('td',{class:'r'},u.toFixed(3)),el('td',{class:'r'},mm!=null?mm.toFixed(3):'—'),
+      el('td',{class:'r '+(r==null?'':Math.abs(r-1)>0.3?'warn':'ok')},r==null?'':r.toFixed(2))))}
+  t.append(el('tr',{},el('th',{},'Total'),el('th',{class:'r'},su.toFixed(2)),el('th',{class:'r'},LASTV?sm.toFixed(2):'—'),el('th',{})));
+  return el('div',{id:'massreport'},t)}
+
+/* ---------- Selected tab ---------- */
+function renderSel(){
+  const P=$('#ps');P.innerHTML='';if(!SEL){P.append(hint('Click a link in the tree or 3D view.'));return}
+  const l=M.links[SEL],lc=C.links[SEL],g=C.global,jn=Object.values(M.joints).find(j=>j.child===SEL);
+  lc.geom=lc.geom||{};
+  const mm=lc.massMode&&lc.massMode!=='inherit'?lc.massMode:g.defaultMassMode;
+  const ine=l.inertial,cm=LASTV?.masses?.[SEL];
+  const re=()=>{renderSel()};
+  P.append(D('s-link',`Link: ${SEL}`,
+    hint(`URDF mass ${ine?ine.mass.toFixed(4):'—'} kg · compiled ${cm!=null?cm.toFixed(4)+' kg':'—'} · ${l.visuals.length} visual, ${l.collisions.length} collision`),
+    sel(lc,'massMode','Mass source',[['inherit',`— inherit (${g.defaultMassMode})`],...MASSMODES],re),
+    ...(mm==='urdf'?[Fq(lc,'massScale','URDF mass × scale','num',{ph:g.defaultMassScale})]:[]),
+    ...(mm==='density'?[sel(lc,'material','Material',[['','— inherit']].concat(MATOPTS())),Fq(lc,'density','Density kg/m³','num',{ph:'from material'})]:[]),
+    ...(mm==='mass'?[Fq(lc,'mass','Total mass kg','num',{ph:ine?ine.mass:''})]:[]),
+    sel(lc,'meshInertia','Mesh volume method',[['inherit',`— inherit (${g.defaultMeshInertia})`],...MESHINERT]),
+    sel(lc,'collision','Collision geometry',[['inherit',`— inherit (${g.defaultCollision})`],...COLLMODES]),
+    Fq(lc,'fitscale','Fitted primitive scale','num',{ph:g.defaultFitscale}),
+    Fq(lc,'gravcomp','Gravity compensation','num',{ph:0,hint:'Fraction of weight cancelled (1 = floats)'}),
+    Fq(lc,'rgba','Colour override RGBA','vec4'),
+    ...fields(lc.geom,S.geom,k=>g.geomDefaults[k])));
+  if(jn){
+    const jc=C.joints[jn.name];jc.dyn=jc.dyn||{};jc.actuator=jc.actuator||{type:'inherit'};
+    const sc=isScalar(jn);
+    const box=[hint(`${jn.type} · ${jn.parent} → ${jn.child} · axis [${jn.axis}]${jn.effort?` · URDF effort ${jn.effort}`:''}${jn.velocity?` · URDF velocity ${jn.velocity}`:''}`)];
+    if(sc){
+      const lo=jn.type==='continuous'?-Math.PI:num(jc.lower)??jn.lower,hi=jn.type==='continuous'?Math.PI:num(jc.upper)??jn.upper;
+      const s=el('input',{type:'range',min:Math.min(lo,-0.01),max:Math.max(hi,0.01),step:0.005,value:Q[jn.name]||0});
+      const sv=el('span',{class:'mut'},(Q[jn.name]||0).toFixed(3));
+      s.oninput=()=>{setQ(jn.name,parseFloat(s.value));sv.textContent=parseFloat(s.value).toFixed(3)};
+      box.push(el('div',{class:'row'},el('label',{},'Preview pose'),el('div',{style:'display:flex;gap:6px;align-items:center'},s,sv)),
+        Fq(jc,'limited','Limited','tri',{ph:jn.upper>jn.lower?'yes':'no'}),
+        Fq(jc,'lower','Lower limit','num',{ph:jn.lower}),Fq(jc,'upper','Upper limit','num',{ph:jn.upper}),
+        ...fields(jc.dyn,S.joint,k=>k==='damping'&&jn.damping?jn.damping:k==='frictionloss'&&jn.friction?jn.friction:g.jointDefaults[k]));
+    }
+    P.append(D('s-joint',`Joint: ${jn.name}`,...box));
+    if(sc){
+      const ac=jc.actuator,ad=g.actuatorDefaults,abox=el('div');
+      const draw=()=>{abox.innerHTML='';abox.append(...actFields(ac,ad))};draw();
+      const rx=el('input',{type:'text',placeholder:'regex, e.g. ^(FR|FL|RR|RL)_ or _h'});const lim=el('input',{type:'checkbox'});
+      P.append(D('s-act','Motor / actuator',
+        field(ac,{k:'type',label:'Type',t:'sel',opts:[['inherit',`— inherit (${ad.type})`],...S.actTypes.map(t=>[t,`${t} — ${S.actDesc[t]}`])]},undefined,()=>{draw();renderTree()}),abox));
+      P.append(D('s-bulk','Copy this joint to others',hint('Copies dynamics + actuator settings (and optionally limits) to all joints whose name matches.'),
+        el('div',{class:'row'},el('label',{},'Joint name regex'),rx),el('div',{class:'chk'},el('label',{},lim,'include limits')),
+        el('div',{class:'btns'},el('button',{onclick:()=>{let re;try{re=new RegExp(rx.value||'.*')}catch(e){return alert(e.message)}let n=0;
+          for(const[k,j]of Object.entries(M.joints)){if(k===jn.name||!isScalar(j)||!re.test(k))continue;const o=C.joints[k];o.dyn=JSON.parse(JSON.stringify(jc.dyn));o.actuator=JSON.parse(JSON.stringify(jc.actuator));
+            if(lim.checked){o.limited=jc.limited;o.lower=jc.lower;o.upper=jc.upper}n++}
+          renderTree();changed();alert(`Copied to ${n} joints`)}},'Apply to matching joints'))));
+      const q=el('div',{class:'chk'});
+      for(const[t,lab]of[['jointpos','position'],['jointvel','velocity'],['actuatorfrc','motor force'],['jointactuatorfrc','joint actuator force'],['jointlimitfrc','limit force']]){const c=el('input',{type:'checkbox'});c.checked=!!findSensor(t,{joint:jn.name});c.onchange=()=>{toggleSensor(t,{joint:jn.name},c.checked)};q.append(el('label',{},c,lab))}
+      for(const[t,lab]of[['torque','F/T torque'],['force','F/T force'],['gyro','gyro'],['accelerometer','accel']]){const c=el('input',{type:'checkbox'});c.checked=!!findSensor(t,{body:jn.child,pos:[0,0,0]});c.onchange=()=>toggleSensor(t,{body:jn.child},c.checked);q.append(el('label',{},c,lab+' @joint'))}
+      P.append(D('s-qj','Quick sensors at this joint/motor',q,hint('Site sensors sit at the joint frame on the child link. Edit details in the Sensors tab.')));
+    }
+  }
+  const w=el('div',{class:'chk'});
+  for(const[t,lab]of[['gyro','gyro'],['accelerometer','accel'],['framequat','orientation'],['framepos','position'],['framelinvel','lin vel'],['velocimeter','velocimeter'],['magnetometer','magnetometer'],['touch','touch'],['subtreecom','subtree COM']]){const c=el('input',{type:'checkbox'});const tgt=S.sensors[t].kind==='body'?{body:SEL,pos:[0,0,0]}:{body:SEL,pos:[0,0,0]};c.checked=!!findSensor(t,tgt);c.onchange=()=>toggleSensor(t,{body:SEL},c.checked);w.append(el('label',{},c,lab))}
+  const ct=el('input',{type:'checkbox'});ct.checked=!!C.sensors.find(s=>s.type==='contact'&&s.body===SEL);ct.onchange=()=>toggleSensor('contact',{body:SEL},ct.checked);w.append(el('label',{},ct,'foot contact w/ floor'));
+  P.append(D('s-ql','Quick sensors on this link (origin)',w));
+}
+
+/* ---------- sensors ---------- */
+const sameV=(a,b)=>(a||[0,0,0]).every((x,i)=>Math.abs((x||0)-((b||[0,0,0])[i]||0))<1e-9);
+function findSensor(type,t){return C.sensors.find(s=>s.type===type&&(t.joint?s.joint===t.joint:(s.body===t.body&&sameV(s.pos,t.pos))))}
+function newSensor(type,t){const k=S.sensors[type].kind;const s={type,name:`${t.joint||t.body||type}_${type}`,...t};
+  if(k==='site'||k==='frame'){s.pos=s.pos||[0,0,0];s.euler=s.euler||[0,0,0]}
+  if(type==='touch'){s.siteType='sphere';s.siteSize=[0.03]}
+  if(k==='contact'){s.other='floor';s.data=['found','force'];s.num=1;s.reduce='netforce'}
+  return s}
+function toggleSensor(type,t,on){
+  const ex=type==='contact'?C.sensors.find(s=>s.type==='contact'&&s.body===t.body):findSensor(type,{pos:[0,0,0],...t});
+  if(on&&!ex)C.sensors.push(newSensor(type,t));
+  if(!on&&ex)C.sensors.splice(C.sensors.indexOf(ex),1);
+  changed();updateMarkers();renderSensors()}
+function topBody(){const r=M.roots[0];if(M.links[r].visuals.length)return r;const c=(M.children[r]||[]).map(j=>M.joints[j].child);return c[0]||r}
+const linkOpts=()=>Object.keys(M.links);
+const jointOpts=()=>Object.keys(M.joints).filter(n=>isScalar(M.joints[n]));
+function sensorBody(s){
+  const k=S.sensors[s.type].kind,out=[];
+  const re=()=>{changed();updateMarkers();renderSensors()};
+  if(k==='site'||k==='frame'||k==='body'||k==='contact')out.push(sel(s,'body',k==='contact'?'Body':'Attach to link',linkOpts(),re));
+  if(k==='joint'||k==='actuator')out.push(sel(s,'joint',k==='actuator'?'Actuator of joint':'Joint',jointOpts(),re));
+  if(k==='site'||k==='frame'){
+    out.push(Fq(s,'pos','Offset xyz (m)','vec3',{ph:[0,0,0],onchg:updateMarkers}),Fq(s,'euler','Rotation rpy (rad)','vec3',{ph:[0,0,0]}),
+      sel(s,'siteType','Site shape',['sphere','box','capsule','cylinder','ellipsoid']),Fq(s,'siteSize','Site size','vec3',{ph:[0.008],hint:'For touch: the sensing volume'}));
+    if(s.type==='rangefinder')out.push(hint('Measures along the site +Z axis; rotate with rpy.'));
+  }
+  if(k==='frame')out.push(sel(s,'refBody','Relative to link',[['','— world frame'],...linkOpts()]));
+  if(k==='contact'){
+    out.push(Fq(s,'subtree','Include whole subtree','bool'),sel(s,'other','Contact with',[['','— anything'],['floor','floor'],...linkOpts()]),
+      Fq(s,'num','Contacts reported','int',{ph:1}),sel(s,'reduce','Reduction',['none','mindist','maxforce','netforce']));
+    const w=el('div',{class:'chk'});s.data=s.data||['found'];
+    for(const d of S.contactData){const c=el('input',{type:'checkbox'});c.checked=s.data.includes(d);c.onchange=()=>{s.data=c.checked?[...s.data,d]:s.data.filter(x=>x!==d);changed()};w.append(el('label',{},c,d))}
+    out.push(el('div',{class:'row'},el('label',{},'Data fields'),w));
+  }
+  out.push(...fields(s,S.sensorCommon));
+  if(S.sensors[s.type].kind==='none'&&s.type.startsWith('e_'))out.push(hint('Energy sensors need the "energy" flag (Physics tab) — enabled automatically by MuJoCo when present.'));
+  return out}
+function renderSensors(){
+  const P=$('#pn');P.innerHTML='';
+  P.append(D('n-quick','Quick add',
+    el('div',{class:'btns'},
+      el('button',{onclick:()=>{const b=topBody();for(const t of['gyro','accelerometer','framequat'])if(!findSensor(t,{body:b,pos:[0,0,0]}))C.sensors.push(newSensor(t,{body:b}));renderSensors();changed();updateMarkers()}},'IMU at origin'),
+      el('button',{onclick:()=>{for(const n of jointOpts())for(const t of['jointpos','jointvel'])if(!findSensor(t,{joint:n}))C.sensors.push(newSensor(t,{joint:n}));renderSensors();changed()}},'Encoders (all joints)'),
+      el('button',{onclick:()=>{for(const n of jointOpts())if(!findSensor('jointactuatorfrc',{joint:n}))C.sensors.push(newSensor('jointactuatorfrc',{joint:n}));renderSensors();changed()}},'Joint torques (all)'),
+      el('button',{onclick:()=>{const leaves=Object.keys(M.links).filter(l=>!(M.children[l]||[]).length&&M.links[l].visuals.length);for(const b of leaves)if(!C.sensors.find(s=>s.type==='contact'&&s.body===b))C.sensors.push(newSensor('contact',{body:b}));renderSensors();changed()}},'Contact on leaf links (feet/hands)'),
+      el('button',{onclick:()=>{if(!C.sensors.find(s=>s.type==='clock'))C.sensors.push(newSensor('clock',{}));renderSensors();changed()}},'Clock')),
+    el('div',{class:'hint'},'Apply noise / delay to many sensors:'),
+    (()=>{const o={};const ty=el('select');ty.append(el('option',{value:''},'all sensors'));for(const t of[...new Set(C.sensors.map(s=>s.type))])ty.append(el('option',{value:t},t));
+      return el('div',{},el('div',{class:'row'},el('label',{},'Apply to'),ty),...fields(o,S.sensorCommon),
+        el('div',{class:'btns'},el('button',{onclick:()=>{let n=0;for(const s of C.sensors)if(!ty.value||s.type===ty.value){for(const[k,v]of Object.entries(o))if(!blank(v))s[k]=v;n++}renderSensors();changed();alert(`Updated ${n} sensors`)}},'Apply'),
+          el('button',{onclick:()=>{if(confirm('Remove ALL sensors?')){C.sensors=[];renderSensors();renderSel();changed();updateMarkers()}}},'Remove all sensors')))})()));
+  // add new
+  const ty=el('select');const groups={site:'Site-mounted (IMU, F/T, touch, range)',frame:'Frame (pose / velocity)',joint:'Joint',actuator:'Actuator',body:'Subtree',contact:'Contact',none:'Global'};
+  for(const[k,lab]of Object.entries(groups)){const og=el('optgroup',{label:lab});for(const[t,v]of Object.entries(S.sensors))if(v.kind===k)og.append(el('option',{value:t},`${t} — ${v.desc}`));ty.append(og)}
+  P.append(D('n-add','Add sensor',el('div',{class:'row'},el('label',{},'Type'),ty),
+    el('div',{class:'btns'},el('button',{class:'pri',onclick:()=>{const k=S.sensors[ty.value].kind;const t={};
+      if(['site','frame','body','contact'].includes(k))t.body=SEL||topBody();if(k==='joint'||k==='actuator')t.joint=(SEL&&Object.values(M.joints).find(j=>j.child===SEL&&isScalar(j))?.name)||jointOpts()[0];
+      const s=newSensor(ty.value,t);let i=2;const b=s.name;while(C.sensors.some(x=>x.name===s.name))s.name=`${b}_${i++}`;C.sensors.push(s);SOPEN.add(s);renderSensors();changed();updateMarkers()}},'Add (uses selected link)'))));
+  const list=el('div');
+  C.sensors.forEach((s,i)=>{const open=SOPEN.has(s);const tgt=s.joint||s.body||'';
+    const nm=el('input',{type:'text',style:'max-width:150px',onclick:e=>e.stopPropagation()});nm.value=s.name||'';nm.oninput=()=>{s.name=nm.value;changed()};
+    const card=el('div',{class:'card'},el('div',{class:'hd',onclick:()=>{open?SOPEN.delete(s):SOPEN.add(s);renderSensors()}},
+      el('span',{class:'tag'},s.type),el('b',{title:tgt},tgt),nm,el('button',{class:'sm',onclick:e=>{e.stopPropagation();C.sensors.splice(i,1);renderSensors();renderSel();changed();updateMarkers()}},'✕')));
+    if(open)card.append(el('div',{class:'bd'},sensorBody(s)));list.append(card)});
+  const dims=LASTV?.sensors?` · ${LASTV.nsensordata} values in sensordata`:'';
+  P.append(D('n-list',`Sensors (${C.sensors.length})${dims}`,hint('Click a sensor to edit it.'),list));
+}
+
+/* ---------- Extras: cameras, excludes, keyframes, sensor layout ---------- */
+function renderExtras(){
+  const P=$('#px');P.innerHTML='';
+  const cams=el('div');
+  C.cameras.forEach((c,i)=>cams.append(el('div',{class:'card'},el('div',{class:'hd'},el('span',{class:'tag'},'camera'),el('b',{},c.name||'cam'),el('button',{class:'sm',onclick:()=>{C.cameras.splice(i,1);renderExtras();changed()}},'✕')),
+    el('div',{class:'bd'},Fq(c,'name','Name','text'),sel(c,'body','Mounted on',[['','— world'],...linkOpts()]),Fq(c,'pos','Position','vec3'),Fq(c,'euler','Rotation rpy','vec3',{hint:'Camera looks along its -Z axis'}),
+      sel(c,'mode','Mode',['fixed','track','trackcom','targetbody','targetbodycom'],()=>renderExtras()),
+      ...(['targetbody','targetbodycom'].includes(c.mode)?[sel(c,'target','Target link',linkOpts())]:[]),Fq(c,'fovy','Field of view (deg)','num',{ph:45})))));
+  P.append(D('x-cam',`Cameras (${C.cameras.length})`,cams,el('div',{class:'btns'},
+    el('button',{onclick:()=>{C.cameras.push({name:`cam${C.cameras.length+1}`,body:'',pos:[1.5,-1.5,1.2],mode:'targetbodycom',target:topBody(),fovy:45});renderExtras();changed()}},'+ Camera looking at robot'),
+    el('button',{onclick:()=>{C.cameras.push({name:`cam${C.cameras.length+1}`,body:SEL||topBody(),pos:[0,0,0.1],euler:[0,0,0],mode:'fixed'});renderExtras();changed()}},'+ Camera on selected link'))));
+  const ex=el('div');
+  C.excludes.forEach((e,i)=>ex.append(el('div',{class:'row',style:'grid-template-columns:1fr 1fr auto'},sel(e,'b1','',linkOpts()).lastChild,sel(e,'b2','',linkOpts()).lastChild,el('button',{class:'sm',onclick:()=>{C.excludes.splice(i,1);renderExtras();changed()}},'✕'))));
+  P.append(D('x-ex',`Contact excludes (${C.excludes.length})`,hint('Disable collisions between two specific links (parent–child pairs are already excluded).'),ex,
+    el('div',{class:'btns'},el('button',{onclick:()=>{const L=linkOpts();C.excludes.push({b1:SEL||L[0],b2:L[1]});renderExtras();changed()}},'+ Exclude pair'))));
+  const kf=el('div');
+  C.keyframes.forEach((k,i)=>{const n=Object.values(k.qpos||{}).filter(v=>v).length;
+    kf.append(el('div',{class:'card'},el('div',{class:'hd'},el('span',{class:'tag'},'key'),el('b',{},`${k.name} (${n} non-zero joints)`),
+      el('button',{class:'sm',onclick:()=>{for(const j of jointOpts())setQ(j,k.qpos?.[j]||0);renderSel()}},'Preview'),
+      el('button',{class:'sm',onclick:()=>{k.qpos={...Q};renderExtras();changed()}},'Update from pose'),
+      el('button',{class:'sm',onclick:()=>{C.keyframes.splice(i,1);renderExtras();changed()}},'✕')),
+      el('div',{class:'bd'},Fq(k,'name','Name','text'),Fq(k,'ctrlFromPose','Set servo targets to pose','bool',{hint:'Position/PID setpoints = this pose, so the robot holds it'}))))});
+  P.append(D('x-key',`Keyframes (${C.keyframes.length})`,hint('Pose joints with the Preview sliders (Selected tab), then capture. First keyframe is used for the stability check.'),kf,
+    el('div',{class:'btns'},el('button',{onclick:()=>{C.keyframes.push({name:C.keyframes.length?`pose${C.keyframes.length}`:'home',qpos:{...Q},ctrlFromPose:true});renderExtras();changed()}},'+ Capture current preview pose'),
+      el('button',{onclick:()=>{for(const j of jointOpts())setQ(j,0);renderSel()}},'Zero preview pose'))));
+  if(LASTV?.sensors?.length){const t=el('table',{},el('tr',{},el('th',{},'#'),el('th',{},'sensor'),el('th',{class:'r'},'dim'),el('th',{class:'r'},'sensordata index')));let a=0;
+    LASTV.sensors.forEach((s,i)=>{t.append(el('tr',{},el('td',{},i),el('td',{},s.name),el('td',{class:'r'},s.dim),el('td',{class:'r'},s.dim>1?`${a}–${a+s.dim-1}`:a)));a+=s.dim});
+    P.append(D('x-sd','Sensor data layout',t))}
+}
+
+/* ---------- tree ---------- */
+function actTypeOf(jn){const t=C.joints[jn]?.actuator?.type;return!t||t==='inherit'?C.global.actuatorDefaults.type:t}
+function renderTree(){
+  const T=$('#tree');T.innerHTML='';
+  const walk=(l,d,j)=>{const a=j&&isScalar(j)?actTypeOf(j.name):'none';
+    const n=el('div',{class:'n'+(SEL===l?' sel':''),style:`padding-left:${6+d*14}px`,onclick:()=>select(l)},l,j?el('span',{class:'jt'},` ·${j.type[0]}`):'',a!=='none'?el('span',{class:'act'},` ⚙${a}`):'');
+    T.append(n);for(const jn of M.children[l]||[]){const cj=M.joints[jn];walk(cj.child,d+1,cj)}};
+  M.roots.forEach(r=>walk(r,0,null));
+}
+function select(l){SEL=l;renderTree();renderSel();highlight();document.querySelector('[data-p=ps]').click()}
+
+/* ---------- 3D viewer ---------- */
+let V3=null;
+function initViewer(){
+  const host=$('#view');
+  if(typeof THREE==='undefined'){$('#viewmsg').textContent='three.js failed to load (offline?) — 3D preview disabled; everything else works.';return}
+  const r=new THREE.WebGLRenderer({antialias:true});host.append(r.domElement);
+  const sc=new THREE.Scene();sc.background=new THREE.Color(0x0e1014);
+  const cam=new THREE.PerspectiveCamera(45,1,0.01,100);cam.up.set(0,0,1);cam.position.set(1.4,-1.4,1.0);
+  sc.add(new THREE.HemisphereLight(0xffffff,0x222233,0.9));const dl=new THREE.DirectionalLight(0xffffff,0.8);dl.position.set(2,-3,4);sc.add(dl);
+  const grid=new THREE.GridHelper(4,40,0x445,0x223);grid.rotation.x=Math.PI/2;sc.add(grid);sc.add(new THREE.AxesHelper(0.3));
+  const ctl=typeof THREE.OrbitControls!=='undefined'?new THREE.OrbitControls(cam,r.domElement):{update(){},target:new THREE.Vector3()};
+  const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
+  V3={r,sc,cam,ctl,root:null,links:{},joints:{},meshes:[],markers:[]};
+  const rs=()=>{const w=host.clientWidth,h=host.clientHeight;r.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix()};
+  new ResizeObserver(rs).observe(host);rs();
+  let dn=null;r.domElement.addEventListener('pointerdown',e=>dn=[e.clientX,e.clientY]);
+  r.domElement.addEventListener('pointerup',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>4)return;const b=r.domElement.getBoundingClientRect();
+    mouse.set((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1);ray.setFromCamera(mouse,cam);
+    const h=ray.intersectObjects(V3.meshes,false)[0];if(h)select(h.object.userData.link)});
+  (function loop(){requestAnimationFrame(loop);ctl.update();r.render(sc,cam)})();
+}
+const STLCACHE={};
+function parseSTL(buf){
+  const dv=new DataView(buf);const n=buf.byteLength>=84?dv.getUint32(80,true):0;let pos;
+  if(84+n*50===buf.byteLength){pos=new Float32Array(n*9);for(let i=0;i<n;i++)for(let k=0;k<9;k++)pos[i*9+k]=dv.getFloat32(84+i*50+12+k*4,true)}
+  else{const t=new TextDecoder().decode(buf),a=[];const re=/vertex\s+(\S+)\s+(\S+)\s+(\S+)/g;let m;while(m=re.exec(t))a.push(+m[1],+m[2],+m[3]);pos=new Float32Array(a)}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.computeVertexNormals();return g}
+const eul=r=>new THREE.Euler(r[0],r[1],r[2],'ZYX');
+function setQ(n,v){Q[n]=v;if(!V3)return;const j=M.joints[n],g=V3.joints[n];if(!g)return;
+  const ax=new THREE.Vector3(...j.axis).normalize();if(j.type==='prismatic'){g.position.copy(ax.multiplyScalar(v))}else g.quaternion.setFromAxisAngle(ax,v)}
+function buildScene(){
+  if(!V3)return;const{sc}=V3;if(V3.root)sc.remove(V3.root);V3.links={};V3.joints={};V3.meshes=[];
+  const root=new THREE.Group();V3.root=root;sc.add(root);
+  const mk=(l,parent)=>{const g=new THREE.Group();V3.links[l]=g;parent.add(g);
+    for(const v of M.links[l].visuals){
+      const place=m=>{m.position.set(...v.pos);m.rotation.copy(eul(v.rpy));m.userData.link=l;g.add(m);V3.meshes.push(m);highlight()};
+      const col=v.rgba?new THREE.Color(v.rgba[0],v.rgba[1],v.rgba[2]):new THREE.Color(0xbbbbbb);
+      const mat=()=>new THREE.MeshStandardMaterial({color:col,metalness:.2,roughness:.6,side:THREE.DoubleSide});
+      if(v.type==='mesh'){if(!v.hasMesh)continue;
+        (STLCACHE[v.path]=STLCACHE[v.path]||fetch('/api/mesh?path='+encodeURIComponent(v.path)).then(r=>r.arrayBuffer()).then(parseSTL)).then(geo=>{
+          const m=new THREE.Mesh(geo,mat());const s=C.global.meshScale||1;m.scale.set(...v.scale.map(x=>x*s));place(m)})}
+      else{let geo;if(v.type==='box')geo=new THREE.BoxGeometry(...v.size);else if(v.type==='sphere')geo=new THREE.SphereGeometry(v.radius);else{geo=new THREE.CylinderGeometry(v.radius,v.radius,v.length);geo.rotateX(Math.PI/2)}place(new THREE.Mesh(geo,mat()))}}
+    for(const jn of M.children[l]||[]){const j=M.joints[jn];const o=new THREE.Group();o.position.set(...j.pos);o.rotation.copy(eul(j.rpy));g.add(o);
+      const mo=new THREE.Group();o.add(mo);V3.joints[jn]=mo;mk(j.child,mo)}};
+  M.roots.forEach(r=>mk(r,root));
+  for(const[n,v]of Object.entries(Q))setQ(n,v);
+  $('#viewmsg').textContent='Click a link to select · drag to orbit · wheel to zoom · orange = sensor sites';updateMarkers();
+  V3.ctl.target.set(0,0,0.2);
+}
+function highlight(){if(!V3)return;for(const m of V3.meshes)m.material.emissive&&m.material.emissive.setHex(m.userData.link===SEL?0x1b4f8f:0)}
+function updateMarkers(){
+  if(!V3)return;for(const m of V3.markers)m.parent&&m.parent.remove(m);V3.markers=[];const seen=new Set();
+  for(const s of C.sensors){const k=S.sensors[s.type]?.kind;if(!(k==='site'||k==='frame')||!s.body)continue;const g=V3.links[s.body];if(!g)continue;
+    const p=(s.pos||[0,0,0]).map(x=>x||0);const key=s.body+p.join(',');if(seen.has(key))continue;seen.add(key);
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.012),new THREE.MeshBasicMaterial({color:0xff8800,depthTest:false}));m.renderOrder=9;m.position.set(...p);g.add(m);V3.markers.push(m)}
+}
+
+/* ---------- generation / io ---------- */
+async function generate(){
+  if(!M)return;const seq=++genSeq;$('#status').innerHTML='<span class="mut">generating…</span>';
+  try{
+    const r=await api('/api/generate',{config:C});if(seq!==genSeq)return;
+    lastXML=r.xml;$('#xml').textContent=r.xml;const v=r.validation;let h='';LASTV=v.ok?v:LASTV;
+    if(v.ok===true)h+=`<span class="ok">✔ MuJoCo ${v.version}: ${v.message}</span> — ${v.nbody} bodies, nq ${v.nq}, ${v.nu} controls, ${v.na} act. states, ${v.nsensor} sensors (${v.nsensordata} values), ${v.nkey} keyframes, total mass <b>${v.totalMass.toFixed(3)} kg</b>, 0.5 s sim ${v.stable?'<span class="ok">stable</span>':'<span class="bad">diverged (NaN)!</span>'}`;
+    else if(v.ok===false)h+=`<span class="bad">✘ compile error:</span> ${v.message.replace(/</g,'&lt;')}`;else h+=`<span class="warn">${v.message}</span>`;
+    for(const w of r.warnings)h+=`<div class="warn">⚠ ${w}</div>`;$('#status').innerHTML=h;
+    const mr=$('#massreport');if(mr)mr.replaceWith(massReport());
+    if($('#px').classList.contains('on'))renderExtras();
+  }catch(e){$('#status').innerHTML=`<span class="bad">${e.message}</span>`}
+}
+function migrate(){ // fill missing keys (configs from older versions / partial imports)
+  const d=M.config;
+  const fill=(a,b)=>{for(const k in b){if(a[k]===undefined)a[k]=JSON.parse(JSON.stringify(b[k]));else if(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==='object')fill(a[k],b[k])}};
+  fill(C,d);
+  for(const j of Object.values(C.joints)){j.dyn=j.dyn||{};j.actuator=j.actuator||{type:'inherit'};
+    for(const k of['damping','frictionloss','armature','stiffness','springref'])if(j[k]!=null&&j[k]!==undefined){j.dyn[k]=j[k];delete j[k]}}
+}
+function renderAll(){renderTree();renderModel();renderPhysics();renderDefaults();renderSel();renderSensors();renderExtras()}
+async function loadModel(p){try{M=await api('/api/load',{path:p});setup()}catch(e){alert(e.message)}}
+function setup(){
+  S=M.schema;C=JSON.parse(JSON.stringify(M.config));SEL=null;LASTV=null;for(const k in Q)delete Q[k];
+  $('#path').value=M.path;
+  if(!$('#outdir').value)$('#outdir').value=M.path.replace(/\/[^/]*\/[^/]*$/,'')+'/mjcf_out';
+  $('#fname').value=M.name+'.xml';
+  renderAll();buildScene();generate();
+}
+$('#load').onclick=()=>loadModel($('#path').value);
+$('#path').onkeydown=e=>{if(e.key==='Enter')loadModel($('#path').value)};
+$('#regen').onclick=generate;
+$('#copy').onclick=()=>navigator.clipboard.writeText(lastXML);
+$('#save').onclick=async()=>{try{const r=await api('/api/save',{config:C,outDir:$('#outdir').value,filename:$('#fname').value});alert('Saved '+r.saved+'\nMeshes copied to meshes/, settings saved as urdf2mjcf_config.json'+(r.warnings.length?'\n\nWarnings:\n'+r.warnings.join('\n'):''))}catch(e){alert(e.message)}};
+$('#expcfg').onclick=()=>el('a',{href:URL.createObjectURL(new Blob([JSON.stringify(C,null,2)])),download:'urdf2mjcf_config.json'}).click();
+$('#impcfg').onclick=()=>$('#impfile').click();
+$('#impfile').onchange=async e=>{try{C=JSON.parse(await e.target.files[0].text());migrate();renderAll();buildScene();generate()}catch(err){alert('Bad config: '+err.message)}e.target.value=''};
+document.querySelectorAll('#rtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#rtabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));if(b.dataset.p==='px'&&M)renderExtras()});
+async function ls(p){const r=await api('/api/ls?path='+encodeURIComponent(p||''));$('#mpath').value=r.path;const L=$('#mlist');L.innerHTML='';
+  L.append(el('div',{onclick:()=>ls(r.parent)},'📁 ..'));
+  for(const i of r.items)L.append(el('div',{onclick:()=>i.dir?ls(r.path+'/'+i.name):($('#modal').style.display='none',loadModel(r.path+'/'+i.name))},(i.dir?'📁 ':'📄 ')+i.name));
+  L.append(el('div',{style:'color:var(--acc)',onclick:()=>{$('#modal').style.display='none';loadModel(r.path)}},'✔ Use this folder: '+r.path))}
+$('#browse').onclick=()=>{$('#modal').style.display='flex';ls($('#path').value||'~')};
+$('#mclose').onclick=()=>$('#modal').style.display='none';$('#mgo').onclick=()=>ls($('#mpath').value);
+initViewer();
+api('/api/current').then(r=>{if(!r.none){M=r;setup()}});
+</script></body></html>
